@@ -45,7 +45,10 @@ def collect_opens():
             navigate_click("//img[@alt='検索開始']")
 
             # =======this is where I get the data=======
-            get_data()
+            if i + 1 < PARK_NUM - 1:    #这个逻辑不是很漂亮，因为这样要多做一个函数
+                get_data1()
+            else:
+                get_data2()
 
             if i >= PARK_NUM - 1:
                 break
@@ -60,9 +63,59 @@ def collect_opens():
             
 
 
-def get_data():
-    pass
+def get_data1():
+    element = driver.find_element_by_css_selector('td:nth-child(1) center > table table td:nth-child(1)')  # 我这里的n想取一共有多少行，可能会有点麻烦，不知道有没有更好的写法可以一下子获得有多少行
+    td_content_date = element.find_elements_by_tag_name("td") 
+    lst = []
+    for td in td_content_date:
+        lst.append(td.text)
+    n = len(lst)-1  #n在这里能得到最大行数
 
+
+    lst_temp = []  # 暂时存一下.之后应该是直接储存到DataFrame
+
+    for i in range(0,n):
+        element_date = driver.find_element_by_css_selector(' td:nth-child(1) center > table table td:nth-child(1) tr:nth-child('+str(2+i)+')')  # Column date
+        element_parkA = driver.find_element_by_css_selector(' td:nth-child(1) center > table table td:nth-child(2) tr:nth-child('+str(3+i)+')')  # Column park A
+        element_parkB = driver.find_element_by_css_selector(' td:nth-child(1) center > table table td:nth-child(3) tr:nth-child('+str(3+i)+')')  # Column park B
+    
+    # 提取表格内容td
+        td_content_date = element_date.find_elements_by_tag_name("td") 
+        td_content_parkA = element_parkA.find_elements_by_tag_name("td")
+        td_content_parkB = element_parkB.find_elements_by_tag_name("td")
+
+        for td in td_content_date:
+            lst_temp.append(td.text)
+        for td in td_content_parkA:
+            lst_temp.append(td.text)
+        for td in td_content_parkB:
+            lst_temp.append(td.text)
+    print(lst_temp) # 输出表格内容
+
+def get_data2():
+    element = driver.find_element_by_css_selector('td:nth-child(1) center > table table td:nth-child(1)')  # 我这里的n想取一共有多少行，可能会有点麻烦，不知道有没有更好的写法可以一下子获得有多少行
+    td_content_date = element.find_elements_by_tag_name("td") 
+    lst = []
+    for td in td_content_date:
+        lst.append(td.text)
+    n = len(lst)-1  #n在这里能得到最大行数
+
+
+    lst_temp = []  # 存储为list,之后再改
+
+    for i in range(0,n):
+        element_date = driver.find_element_by_css_selector(' td:nth-child(1) center > table table td:nth-child(1) tr:nth-child('+str(2+i)+')')  # Column date
+        element_parkA = driver.find_element_by_css_selector(' td:nth-child(1) center > table table td:nth-child(2) tr:nth-child('+str(3+i)+')')  # Column park A
+    
+    # 提取表格内容td
+        td_content_date = element_date.find_elements_by_tag_name("td") 
+        td_content_parkA = element_parkA.find_elements_by_tag_name("td")
+
+        for td in td_content_date:
+            lst_temp.append(td.text)
+        for td in td_content_parkA:
+            lst_temp.append(td.text)
+    print(lst_temp) # 输出表格内容
 
 def navigate_click(xpath):
     ele = driver.find_element(By.XPATH, xpath)
