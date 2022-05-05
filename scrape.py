@@ -8,9 +8,10 @@ import time
 
 
 #  initializations
-ser = Service("./chromedriver")
-op = webdriver.ChromeOptions()
-driver = webdriver.Chrome(service=ser, options=op)
+# ser = Service("./chromedriver")
+# op = webdriver.ChromeOptions()
+# driver = webdriver.Chrome(service=ser, options=op)
+driver = webdriver.Chrome()
 df = pd.DataFrame(columns=['Park', 'Availability_Date', 'Availability_Time', 'Availability_Day', 'Opens', 'Data_Collected_at'])
 
 
