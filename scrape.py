@@ -118,10 +118,6 @@ class Scraper:
 
             self.conn.commit()
 
-        # self.cur.close()
-        # self.conn.close()
-        # self.driver.close()
-
 
     # Helper method for get_data to execute SQL command and insert data
     def get_data_helper(self, idx, col, park_name, opens, time_intervals, date, year):
