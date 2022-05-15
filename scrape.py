@@ -38,6 +38,7 @@ class Scraper:
         except (Exception, psycopg2.DatabaseError) as error:
             print(error)
             print('exiting the program with status -1')
+            self.driver.close()
             exit(-1)
 
 
