@@ -30,7 +30,8 @@ class Scraper:
                 host=os.environ['HOST'],
                 database=os.environ['DATABASE'],
                 user=os.environ['DB_USER'],
-                password=os.environ['PASSWORD']
+                password=os.environ['PASSWORD'],
+                sslmode="require"
             )
             
             self.cur = self.conn.cursor()
