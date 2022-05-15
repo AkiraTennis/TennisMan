@@ -3,151 +3,203 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
 from selenium import webdriver
 from bs4 import BeautifulSoup as bs, element
-import pandas as pd
+import chromedriver_binary
 import time
+import psycopg2
+import os
+from dotenv import load_dotenv
 
 
-#  initializations
-# ser = Service("./chromedriver")
-# op = webdriver.ChromeOptions()
-# driver = webdriver.Chrome(service=ser, options=op)
-driver = webdriver.Chrome()
-df = pd.DataFrame(columns=['Park', 'Availability_Date', 'Availability_Time', 'Availability_Day', 'Opens', 'Data_Collected_at'])
+class Scraper:
+    #  initializations
+    driver = webdriver.Chrome()
+    conn = None
+    cur = None
 
+    # constants
+    PARK_NUM = 25
 
-# constants
-PARK_NUM = 25
+    # constructor and connect to db
+    def __init__(self):
+        try:
+            # load the .env file
+            load_dotenv()
 
-
-def collect_opens():
-
-    # click months
-    months = driver.find_elements(By.XPATH, "//img[contains(@name, 'monthGif')]")
-    for i in range(len(months)):
-        months[i].click()
-
-        # pick days
-        days = driver.find_elements(By.XPATH, "//img[contains(@name, 'weektype')]")
-        for i in range(len(days)):
-            days[i].click()
-
-        # pick sports
-        navigate_click("//img[@alt='種目']")
-        driver.find_element(By.LINK_TEXT, "テニス（人工芝）").click()
-        time.sleep(2)
-        
-        for i in range(0, PARK_NUM, 2):
-            driver.find_elements(By.XPATH, "//img[@alt='選択']")[i].click()
+            # connect to the PostgreSQL server
+            self.conn = psycopg2.connect(
+                host=os.environ['HOST'],
+                database=os.environ['DATABASE'],
+                user=os.environ['DB_USER'],
+                password=os.environ['PASSWORD']
+            )
             
-            if i + 1 <= PARK_NUM - 1:
-                driver.find_elements(By.XPATH, "//img[@alt='選択']")[i + 1].click()
+            self.cur = self.conn.cursor()
 
-            # click search
-            navigate_click("//img[@alt='検索開始']")
+        except (Exception, psycopg2.DatabaseError) as error:
+            print(error)
+            print('exiting the program with status -1')
+            exit(-1)
 
-            # =======this is where I get the data=======
-            if i + 1 < PARK_NUM - 1:    #这个逻辑不是很漂亮，因为这样要多做一个函数
-                get_data1()
-            else:
-                get_data2()
 
-            if i >= PARK_NUM - 1:
-                break
-            else:
-                # click back
-                navigate_click("//img[@alt='もどる']")
+    # collect current open slots for each park
+    def collect_opens(self):
+
+        # click months
+        months = self.driver.find_elements(By.XPATH, "//img[contains(@name, 'monthGif')]")
+        for i in range(len(months)):
+            months[i].click()
+
+            # pick days
+            days = self.driver.find_elements(By.XPATH, "//img[contains(@name, 'weektype')]")
+            for i in range(len(days)):
+                days[i].click()
+
+            # pick sports
+            self.navigate_click("//img[@alt='種目']")
+            self.driver.find_element(By.LINK_TEXT, "テニス（人工芝）").click()
+            time.sleep(2)
+            
+            for i in range(0, self.PARK_NUM, 2):
+                self.driver.find_elements(By.XPATH, "//img[@alt='選択']")[i].click()
                 
-                # reclick the previous ones to cancel
-                driver.find_elements(By.XPATH, "//img[@alt='選択']")[i].click()
-                driver.find_elements(By.XPATH, "//img[@alt='選択']")[i + 1].click()
-                time.sleep(1)
+                if i + 1 <= self.PARK_NUM - 1:
+                    self.driver.find_elements(By.XPATH, "//img[@alt='選択']")[i + 1].click()
+
+                # click search
+                self.navigate_click("//img[@alt='検索開始']")
+
+                # =======this is where I get the data=======
+                self.get_data()
+
+                if i >= self.PARK_NUM - 1:
+                    break
+                else:
+                    # click back
+                    self.navigate_click("//img[@alt='もどる']")
+                    
+                    # reclick the previous ones to cancel
+                    self.driver.find_elements(By.XPATH, "//img[@alt='選択']")[i].click()
+                    self.driver.find_elements(By.XPATH, "//img[@alt='選択']")[i + 1].click()
+                    time.sleep(1)
+
+
+    def get_data(self):
+        
+        #  get year and dates
+        year = int(self.driver.find_element(By.XPATH, "//tr[@height='74']").text[:-1])
+        dates = self.driver.find_elements(By.XPATH, "//td[@bgcolor='#e0ffff']")
+        row_count = int(len(dates))
+
+        # accquire park names
+        parks = self.driver.find_elements(By.XPATH, "//td[@valign='middle' and @nowrap]")
+        for i in range(1, len(parks)):
+            parks[i] = parks[i].text
+        parks = parks[1:]
+
+        # accquire time data
+        opens = self.driver.find_elements(By.XPATH, "//tr[@height='39' and @align='center' and @bgcolor='#ffffff']")  # open slots data
+        opens_parkA = opens[:row_count]
+        opens_parkB = opens[row_count:]
+        parkA_col_num = len(opens[0].text.split(' '))
+        parkB_col_num = len(opens[row_count].text.split(' ')) if len(parks) == 2 else 0  # don't set the ParkB column number if only one park is being searched
+        time_intervals = self.driver.find_elements(By.XPATH, "//td[@align='left' and @width='70px']")  # accquire time intervals for each park
+
+        # traverse each row and start collecting open slots data for each park
+        for idx, date in enumerate(dates):
             
+            # park A
+            for col in range(parkA_col_num):
+                self.get_data_helper(idx, col, parks[0], opens_parkA, time_intervals, date, year)
+
+            # park B if there is any on the page
+            if len(parks) == 2:
+                for col in range(parkB_col_num):
+                    self.get_data_helper(idx, col, parks[1], opens_parkB, time_intervals, date, year)
+
+            self.conn.commit()
+
+        # self.cur.close()
+        # self.conn.close()
+        # self.driver.close()
 
 
-def get_data1():
-    element = driver.find_element_by_css_selector('td:nth-child(1) center > table table td:nth-child(1)')  # 我这里的n想取一共有多少行，可能会有点麻烦，不知道有没有更好的写法可以一下子获得有多少行
-    td_content_date = element.find_elements_by_tag_name("td") 
-    lst = []
-    for td in td_content_date:
-        lst.append(td.text)
-    n = len(lst)-1  #n在这里能得到最大行数
+    # Helper method for get_data to execute SQL command and insert data
+    def get_data_helper(self, idx, col, park_name, opens, time_intervals, date, year):
+        val = opens[idx].text.split(" ")[col]
+        if val == '－':  # if the status is "-" means that time it is not available
+            val = -1
+        elif val == '×':  # if the status is "x" means that time it is full. 
+            val = 0
+        else:
+            val = int(val)
+
+        day = date.text[-2]
+        if day == '月':
+            day = 'Mon'
+        elif day == '火':
+            day = 'Tue'
+        elif day == '水':
+            day = 'Wed'
+        elif day == '木':
+            day = 'Thu'
+        elif day == '金':
+            day = 'Fri'
+        elif day == '土':
+            day = 'Sat'
+        else:
+            day = 'Sun'
+        
+        # upsert the data into DB
+        self.cur.execute("""
+            INSERT INTO availables (park_name, date_availability, start_time, end_time, week_of_day, opens, collected_at)
+            VALUES ('{}', '{}', '{}', '{}', '{}', {}, NOW())
+            ON CONFLICT (park_name, date_availability, start_time) 
+            DO UPDATE SET 
+                opens = {},
+                collected_at = NOW();"""
+            .format(
+                park_name, 
+                str(year) + "/" + date.text[:-3], 
+                time_intervals[col].text[:5], 
+                time_intervals[col].text[-5:],
+                day, val, val
+            )
+        )
 
 
-    lst_temp = []  # 暂时存一下.之后应该是直接储存到DataFrame
-
-    for i in range(0,n):
-        element_date = driver.find_element_by_css_selector(' td:nth-child(1) center > table table td:nth-child(1) tr:nth-child('+str(2+i)+')')  # Column date
-        element_parkA = driver.find_element_by_css_selector(' td:nth-child(1) center > table table td:nth-child(2) tr:nth-child('+str(3+i)+')')  # Column park A
-        element_parkB = driver.find_element_by_css_selector(' td:nth-child(1) center > table table td:nth-child(3) tr:nth-child('+str(3+i)+')')  # Column park B
-    
-    # 提取表格内容td
-        td_content_date = element_date.find_elements_by_tag_name("td") 
-        td_content_parkA = element_parkA.find_elements_by_tag_name("td")
-        td_content_parkB = element_parkB.find_elements_by_tag_name("td")
-
-        for td in td_content_date:
-            lst_temp.append(td.text)
-        for td in td_content_parkA:
-            lst_temp.append(td.text)
-        for td in td_content_parkB:
-            lst_temp.append(td.text)
-    print(lst_temp) # 输出表格内容
-
-def get_data2():
-    element = driver.find_element_by_css_selector('td:nth-child(1) center > table table td:nth-child(1)')  # 我这里的n想取一共有多少行，可能会有点麻烦，不知道有没有更好的写法可以一下子获得有多少行
-    td_content_date = element.find_elements_by_tag_name("td") 
-    lst = []
-    for td in td_content_date:
-        lst.append(td.text)
-    n = len(lst)-1  #n在这里能得到最大行数
+    def navigate_click(self, xpath):
+        ele = self.driver.find_element(By.XPATH, xpath)
+        self.driver.execute_script("arguments[0].click();", ele)
+        time.sleep(1)
+        return ele
 
 
-    lst_temp = []  # 存储为list,之后再改
-
-    for i in range(0,n):
-        element_date = driver.find_element_by_css_selector(' td:nth-child(1) center > table table td:nth-child(1) tr:nth-child('+str(2+i)+')')  # Column date
-        element_parkA = driver.find_element_by_css_selector(' td:nth-child(1) center > table table td:nth-child(2) tr:nth-child('+str(3+i)+')')  # Column park A
-    
-    # 提取表格内容td
-        td_content_date = element_date.find_elements_by_tag_name("td") 
-        td_content_parkA = element_parkA.find_elements_by_tag_name("td")
-
-        for td in td_content_date:
-            lst_temp.append(td.text)
-        for td in td_content_parkA:
-            lst_temp.append(td.text)
-    print(lst_temp) # 输出表格内容
-
-def navigate_click(xpath):
-    ele = driver.find_element(By.XPATH, xpath)
-    driver.execute_script("arguments[0].click();", ele)
-    time.sleep(1)
-    return ele
+    def show_cur_page(self):
+        html = self.driver.page_source
+        soup = bs(html)
+        print(soup.prettify())
 
 
-def show_cur_page():
-    html = driver.page_source
-    soup = bs(html)
-    print(soup.prettify())
-
-
-def pretty_print(ele):
-    soup = bs(ele)
-    print(soup.prettify())
+    def pretty_print(ele):
+        soup = bs(ele)
+        print(soup.prettify())
 
 
 def main():
 
+    scraper = Scraper()
+
     # open the link and navigate to filter page
-    driver.get("https://yoyaku.sports.metro.tokyo.lg.jp/web/index.jsp")
-    driver.switch_to.frame("pawae1002")
+    scraper.driver.get("https://yoyaku.sports.metro.tokyo.lg.jp/web/index.jsp")
+    scraper.driver.switch_to.frame("pawae1002")
+    scraper.navigate_click(xpath="//img[@alt='施設の空き状況']/..")
+    scraper.navigate_click(xpath="//img[@alt='検索']/..")
+    scraper.collect_opens()
 
-    navigate_click(xpath="//img[@alt='施設の空き状況']/..")
-    navigate_click(xpath="//img[@alt='検索']/..")
-
-    collect_opens()
-
-    driver.close()
+    # closing connections to db and close winodws 
+    scraper.cur.close()
+    scraper.conn.close()
+    scraper.driver.close()
 
 
 if __name__ == "__main__":
