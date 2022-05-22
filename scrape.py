@@ -1,3 +1,4 @@
+from calendar import month
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.service import Service
@@ -33,6 +34,8 @@ class Scraper:
                 password=os.environ['PASSWORD'],
                 sslmode="require"
             )
+
+            
             
             self.cur = self.conn.cursor()
 
@@ -49,12 +52,7 @@ class Scraper:
         # click months
         months = self.driver.find_elements(By.XPATH, "//img[contains(@name, 'monthGif')]")
         for i in range(len(months)):
-            months[i].click()
-
-            # pick days
-            days = self.driver.find_elements(By.XPATH, "//img[contains(@name, 'weektype')]")
-            for i in range(len(days)):
-                days[i].click()
+            self.driver.find_elements(By.XPATH, "//img[contains(@name, 'monthGif')]")[i].click()
 
             # pick sports
             self.navigate_click("//img[@alt='種目']")
@@ -70,19 +68,15 @@ class Scraper:
                 # click search
                 self.navigate_click("//img[@alt='検索開始']")
 
-                # =======this is where I get the data=======
+                # get the data
                 self.get_data()
 
-                if i >= self.PARK_NUM - 1:
-                    break
-                else:
-                    # click back
-                    self.navigate_click("//img[@alt='もどる']")
-                    
-                    # reclick the previous ones to cancel
-                    self.driver.find_elements(By.XPATH, "//img[@alt='選択']")[i].click()
+                # clicking the buttons to prepare for the next loop
+                self.navigate_click("//img[@alt='もどる']")
+                self.driver.find_elements(By.XPATH, "//img[@alt='選択']")[i].click()
+                if i < self.PARK_NUM - 1:
                     self.driver.find_elements(By.XPATH, "//img[@alt='選択']")[i + 1].click()
-                    time.sleep(1)
+                time.sleep(1)
 
 
     def get_data(self):
@@ -105,18 +99,20 @@ class Scraper:
         parkA_col_num = len(opens[0].text.split(' '))
         parkB_col_num = len(opens[row_count].text.split(' ')) if len(parks) == 2 else 0  # don't set the ParkB column number if only one park is being searched
         time_intervals = self.driver.find_elements(By.XPATH, "//td[@align='left' and @width='70px']")  # accquire time intervals for each park
+        time_intervalsA = time_intervals[:parkA_col_num]
+        time_intervalsB = time_intervals[parkA_col_num:]
 
         # traverse each row and start collecting open slots data for each park
         for idx, date in enumerate(dates):
             
             # park A
             for col in range(parkA_col_num):
-                self.get_data_helper(idx, col, parks[0], opens_parkA, time_intervals, date, year)
+                self.get_data_helper(idx, col, parks[0], opens_parkA, time_intervalsA, date, year)
 
             # park B if there is any on the page
             if len(parks) == 2:
                 for col in range(parkB_col_num):
-                    self.get_data_helper(idx, col, parks[1], opens_parkB, time_intervals, date, year)
+                    self.get_data_helper(idx, col, parks[1], opens_parkB, time_intervalsB, date, year)
 
             self.conn.commit()
 
