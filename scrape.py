@@ -35,7 +35,13 @@ class Scraper:
                 sslmode="require"
             )
 
-            
+            # connect to the local server 
+            # self.conn = psycopg2.connect(
+            #     host='LOCALHOST',
+            #     database='tennis_toei_db',
+            #     user='akiracho',
+            #     password='Welcome2020!',
+            # )
             
             self.cur = self.conn.cursor()
 
