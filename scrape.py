@@ -39,8 +39,8 @@ class Scraper:
             # self.conn = psycopg2.connect(
             #     host='LOCALHOST',
             #     database='tennis_toei_db',
-            #     user='akiracho',
-            #     password='Welcome2020!',
+            #     user='',
+            #     password='',
             # )
             
             self.cur = self.conn.cursor()
